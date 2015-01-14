@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Dynamic;
 using System.Linq;
 using System.Text;
 using OneFiftyOne.Serialization.StreamingXMLSerializer;
@@ -16,7 +17,7 @@ namespace Test
                 ds.ReadXML(filename);
 
                 int c = 0;
-                foreach (var dr in ds["ROADWAY"])
+                foreach (var dr in ds["ROADWAY"].AsEnumerable<ExpandoObject>())
                 {
                     c++;
                 }

@@ -1,13 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Dynamic;
 using System.Linq;
 using System.Text;
 using System.Xml;
 
 namespace OneFiftyOne.Serialization.StreamingXMLSerializer
 {
-    public class StreamingDataTable : IDisposable, IEnumerable<DataRow>
+    public class StreamingDataTable : IDisposable, IEnumerable<DataRow>, IEnumerable<ExpandoObject>
     {
         private DataTable schemaTable;
 
@@ -24,6 +25,14 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
                 if (value == string.Empty)
                     throw new Exception("Cannot set StreamingDataTable's name to be empty");
                 schemaTable.TableName = value;
+            }
+        }
+
+        public DataColumnCollection Columns
+        {
+            get
+            {
+                return schemaTable.Columns;
             }
         }
 
@@ -56,6 +65,47 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
                 return null;
 
             return dr;
+        }
+
+        private ExpandoObject getNextExpando(XmlReader reader)
+        {
+            var obj = new ExpandoObject() as IDictionary<string, object>;
+
+            if (reader.ReadToFollowing(TableName))
+            {
+                using (var subReader = reader.ReadSubtree())
+                {
+                    subReader.Read(); //eat parent node
+                    while (subReader.Read())
+                    {
+                        if (subReader.NodeType == XmlNodeType.Element)
+                        {
+                            if (obj.ContainsKey(subReader.LocalName))
+                                throw new DuplicateNameException("Key '" + subReader.LocalName + "; already exists");
+                            obj[subReader.LocalName]
+                                = subReader.ReadElementContentAs(schemaTable.Columns[subReader.LocalName].DataType, null);
+                        }
+                    }
+                    subReader.Close();
+                }
+            }
+            else
+                return null;
+
+            return (ExpandoObject) obj;
+        }
+
+        public IEnumerator<ExpandoObject> AsExpandoObjects()
+        {
+            using (XmlReader reader = XmlReader.Create(BaseURI))
+            {
+                while (!reader.EOF)
+                {
+                    ExpandoObject obj = getNextExpando(reader);
+                    if (obj != null)
+                        yield return obj;
+                }
+            }
         }
 
         #region IDisposable Members
@@ -97,6 +147,15 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
                         yield return dr;
                 }
             }
+        }
+
+        #endregion
+
+        #region IEnumerable<ExpandoObject> Members
+
+        IEnumerator<ExpandoObject> IEnumerable<ExpandoObject>.GetEnumerator()
+        {
+            return this.AsExpandoObjects();
         }
 
         #endregion
