@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Dynamic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Xml;
@@ -11,6 +12,24 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
     public class StreamingDataTable : IDisposable, IEnumerable<DataRow>, IEnumerable<ExpandoObject>
     {
         private DataTable schemaTable;
+        internal int? count = null;
+
+        #region CONSTRUCTORS
+
+        internal StreamingDataTable(string baseURI, DataTable t)
+        {
+            if (string.IsNullOrWhiteSpace(baseURI))
+                throw new Exception("Missing filename");
+            if (!File.Exists(baseURI))
+                throw new FileNotFoundException("File does not exist: " + baseURI);
+
+            BaseURI = baseURI;
+            schemaTable = t;
+        }
+
+        #endregion
+
+        #region PROPERTIES
 
         public string BaseURI { get; private set; }
 
@@ -36,11 +55,25 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             }
         }
 
-        internal StreamingDataTable(string baseURI, DataTable t)
+        public int Count
         {
-            BaseURI = baseURI;
-            schemaTable = t;
+            get
+            {
+                if (count == null)
+                {
+                    count = 0;
+                    using (XmlReader reader = XmlReader.Create(BaseURI))
+                    {
+                        while (reader.ReadToFollowing(TableName))
+                            count++;
+                    }
+                }
+
+                return count.Value;
+            }
         }
+
+        #endregion
 
         private DataRow getNextDataRow(XmlReader reader)
         {
@@ -92,7 +125,14 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             else
                 return null;
 
-            return (ExpandoObject) obj;
+            //normalize columns
+            foreach (DataColumn c in schemaTable.Columns)
+            {
+                if (!obj.ContainsKey(c.ColumnName))
+                    obj.Add(c.ColumnName, null);
+            }
+
+            return (ExpandoObject)obj;
         }
 
         public IEnumerator<ExpandoObject> AsExpandoObjects()
