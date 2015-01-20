@@ -9,7 +9,7 @@ using System.Xml;
 
 namespace OneFiftyOne.Serialization.StreamingXMLSerializer
 {
-    public class StreamingDataTable : IDisposable, IEnumerable<DataRow>, IEnumerable<ExpandoObject>
+    public class StreamingDataTable : IDisposable, IEnumerable<StreamingDataRow>
     {
         private DataTable schemaTable;
         internal int? count = null;
@@ -75,34 +75,9 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
 
         #endregion
 
-        private DataRow getNextDataRow(XmlReader reader)
+        private Dictionary<string, object> getNextInternal(XmlReader reader)
         {
-            DataRow dr = schemaTable.NewRow();
-            if (reader.ReadToFollowing(TableName))
-            {
-                using (var subReader = reader.ReadSubtree())
-                {
-                    subReader.Read(); //eat parent node
-                    while (subReader.Read())
-                    {
-                        if (subReader.NodeType == XmlNodeType.Element)
-                        {
-                            dr[subReader.LocalName]
-                                = subReader.ReadElementContentAs(schemaTable.Columns[subReader.LocalName].DataType, null);
-                        }
-                    }
-                    subReader.Close();
-                }
-            }
-            else
-                return null;
-
-            return dr;
-        }
-
-        private ExpandoObject getNextExpando(XmlReader reader)
-        {
-            var obj = new ExpandoObject() as IDictionary<string, object>;
+            var obj = new Dictionary<string, object>(StringComparer.CurrentCultureIgnoreCase);
 
             if (reader.ReadToFollowing(TableName))
             {
@@ -132,20 +107,7 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
                     obj.Add(c.ColumnName, null);
             }
 
-            return (ExpandoObject)obj;
-        }
-
-        public IEnumerator<ExpandoObject> AsExpandoObjects()
-        {
-            using (XmlReader reader = XmlReader.Create(BaseURI))
-            {
-                while (!reader.EOF)
-                {
-                    ExpandoObject obj = getNextExpando(reader);
-                    if (obj != null)
-                        yield return obj;
-                }
-            }
+            return obj;
         }
 
         #region IDisposable Members
@@ -153,23 +115,6 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
         public void Dispose()
         {
             schemaTable.Dispose();
-        }
-
-        #endregion
-
-        #region IEnumerable<DataRow> Members
-
-        public IEnumerator<DataRow> GetEnumerator()
-        {
-            using (XmlReader reader = XmlReader.Create(BaseURI))
-            {
-                while (!reader.EOF)
-                {
-                    var dr = getNextDataRow(reader);
-                    if (dr != null)
-                        yield return dr; 
-                }
-            }
         }
 
         #endregion
@@ -182,20 +127,24 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             {
                 while (!reader.EOF)
                 {
-                    var dr = getNextDataRow(reader);
-                    if (dr != null)
-                        yield return dr;
+                    var obj = getNextInternal(reader);
+                    if (obj != null)
+                        yield return new StreamingDataRow(schemaTable.Columns, obj);
                 }
             }
         }
 
-        #endregion
-
-        #region IEnumerable<ExpandoObject> Members
-
-        IEnumerator<ExpandoObject> IEnumerable<ExpandoObject>.GetEnumerator()
+        IEnumerator<StreamingDataRow> IEnumerable<StreamingDataRow>.GetEnumerator()
         {
-            return this.AsExpandoObjects();
+            using (XmlReader reader = XmlReader.Create(BaseURI))
+            {
+                while (!reader.EOF)
+                {
+                    var obj = getNextInternal(reader);
+                    if (obj != null)
+                        yield return new StreamingDataRow(schemaTable.Columns, obj);
+                }
+            }
         }
 
         #endregion
