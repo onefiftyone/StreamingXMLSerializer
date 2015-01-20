@@ -18,11 +18,10 @@ namespace Test
 
                 int c = 0;
                 int t = ds["ROADWAY"].Count;
-                foreach (var dr in ds["ROADWAY"])
-                {
-                    var t2 = dr["roadway_gd"];
-                }
+
+                ds.WriteXML("../../test-file-output.xml");
             }
+
 
         }
     }

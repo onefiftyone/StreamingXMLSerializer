@@ -19,7 +19,7 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
         {
             get
             {
-                return schemaDataSet.DataSetName;
+                return (!string.IsNullOrWhiteSpace(schemaDataSet.DataSetName)) ? schemaDataSet.DataSetName : "NewDataSet";
             }
             set
             {
@@ -56,6 +56,8 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             tables = new List<StreamingDataTable>();
         }
 
+        #region READING
+
         public void ReadXML(string filename)
         {
             BaseURI = filename;
@@ -78,6 +80,32 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             }
         }
 
+        #endregion
+
+        #region WRITING
+
+        public void WriteXML(string file, bool omitXmlDeclaration = true)
+        {
+            if (schemaDataSet == null)
+                throw new Exception("DataSet is not initialized");
+
+            using (var writer = XmlWriter.Create(file, new XmlWriterSettings { OmitXmlDeclaration = omitXmlDeclaration }))
+            {
+                //write root element
+                writer.WriteStartElement(this.DataSetName);
+
+                //write schema
+                schemaDataSet.WriteXmlSchema(writer);
+
+                //TODO: write contents
+
+                //write end root element
+                writer.WriteEndElement();
+            }
+        }
+
+        #endregion
+
         #region IDisposable Members
 
         public void Dispose()
@@ -87,7 +115,7 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
                 foreach (var table in Tables)
                     table.Dispose();
             }
-              
+
             schemaDataSet.Dispose();
         }
 
