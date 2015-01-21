@@ -54,6 +54,13 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
 
                 return _data[column];
             }
+            set
+            {
+                if (!_data.ContainsKey(column))
+                    throw new KeyNotFoundException(string.Format("StreamingDataRow does not contain column: '{0}'", column));
+
+                _data[column] = value;
+            }
         }
 
         public object this[DataColumn column]

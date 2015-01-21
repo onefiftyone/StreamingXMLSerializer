@@ -27,6 +27,14 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             schemaTable = t;
         }
 
+        public StreamingDataTable(string tableName)
+        {
+            if (string.IsNullOrWhiteSpace(tableName))
+                throw new Exception("Invalid table name specified");
+
+            schemaTable = new DataTable(tableName);
+        }
+
         #endregion
 
         #region PROPERTIES
@@ -73,7 +81,11 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             }
         }
 
+        public object DataSource { get; set; }
+
         #endregion
+
+        #region READING
 
         private Dictionary<string, object> getNextInternal(XmlReader reader)
         {
@@ -110,11 +122,116 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             return obj;
         }
 
+        #endregion
+
+        #region WRITING
+
+        internal DataTable BuildSchemaTable()
+        {
+            if (DataSource == null)
+                throw new Exception("DataSource cannot be NULL");
+
+            if (DataSource is IDataReader)
+                buildSchemaFromDataReader();
+            else if (DataSource is IEnumerable<StreamingDataRow>)
+                buildSchemaFromStreamingDataRow((DataSource as IEnumerable<StreamingDataRow>).FirstOrDefault());
+            else
+                throw new Exception("Invalid DataSource Type");
+
+            return this.schemaTable;
+        }
+
+        private void buildSchemaFromStreamingDataRow(StreamingDataRow templateRow)
+        {
+            if (templateRow == null)
+                throw new Exception("Empty Data Source");
+
+            schemaTable.Columns.Clear();
+
+            foreach (DataColumn c in templateRow.Columns)
+                schemaTable.Columns.Add(c.ColumnName, c.DataType);
+        }
+
+        private void buildSchemaFromDataReader()
+        {
+            DataTable drSchema = ((IDataReader)DataSource).GetSchemaTable();
+            foreach (DataRow dr in drSchema.Rows)
+            {
+                string columnName = dr["ColumnName"].ToString();
+                Type columnType;
+                if (drSchema.Columns.Contains("DataTypeName"))
+                    columnType = Type.GetType(dr["DataTypeName"].ToString());
+                else
+                    columnType = dr["DataType"] as Type;
+
+                DataColumn column = new DataColumn(columnName, columnType);
+                schemaTable.Columns.Add(column);
+            }
+        }
+
+        internal void WriteXML(XmlWriter writer)
+        {
+            if (DataSource == null)
+                throw new Exception("DataSource cannot be NULL");
+
+            IEnumerable<StreamingDataRow> dataRows;
+
+            if (DataSource is IDataReader)
+                dataRows = consumeReader(DataSource as IDataReader);
+            else if (DataSource is IEnumerable<StreamingDataRow>)
+                dataRows = DataSource as IEnumerable<StreamingDataRow>;
+            else
+                throw new Exception("Invalid DataSource Type");
+
+            foreach (StreamingDataRow row in dataRows)
+            {
+                writer.WriteStartElement(TableName);
+                foreach (DataColumn column in row.Columns)
+                {
+                    writer.WriteStartElement(column.ColumnName);
+                    writer.WriteValue(row[column]);
+                    writer.WriteEndElement();
+                }
+                writer.WriteEndElement();
+            }
+        }
+
+        private IEnumerable<StreamingDataRow> consumeReader(IDataReader dataReader)
+        {
+            try
+            {
+                while (dataReader.Read())
+                {
+                    var row = new StreamingDataRow(schemaTable.Columns);
+                    for (int i = 0; i < dataReader.FieldCount; i++)
+                    {
+                        if (!dataReader.IsDBNull(i))
+                            row[dataReader.GetName(i)] = dataReader.GetValue(i);
+                    }
+
+                    yield return row;
+                }
+            }
+            finally
+            {
+                dataReader.Close();
+            }
+        }
+
+        #endregion
+
         #region IDisposable Members
 
         public void Dispose()
         {
             schemaTable.Dispose();
+            if (DataSource != null)
+            {
+                if(DataSource is IDataReader)
+                    ((IDataReader)DataSource).Close();
+                if (DataSource is IDisposable)
+                    ((IDisposable)DataSource).Dispose();
+            }
         }
 
         #endregion

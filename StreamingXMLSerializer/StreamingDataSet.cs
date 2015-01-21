@@ -53,7 +53,18 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
 
         public StreamingDataSet()
         {
+            schemaDataSet = new DataSet();
             tables = new List<StreamingDataTable>();
+        }
+
+        public StreamingDataSet(string dataSetName) : this()
+        {
+            DataSetName = dataSetName;
+        }
+
+        public void AddTable(StreamingDataTable table)
+        {
+            tables.Add(table);
         }
 
         #region READING
@@ -89,6 +100,11 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             if (schemaDataSet == null)
                 throw new Exception("DataSet is not initialized");
 
+            //build schema for contained tables
+            schemaDataSet.Tables.Clear();
+            foreach (StreamingDataTable t in Tables)
+                schemaDataSet.Tables.Add(t.BuildSchemaTable());
+
             using (var writer = XmlWriter.Create(file, new XmlWriterSettings { OmitXmlDeclaration = omitXmlDeclaration }))
             {
                 //write root element
@@ -97,7 +113,9 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
                 //write schema
                 schemaDataSet.WriteXmlSchema(writer);
 
-                //TODO: write contents
+                //write contents
+                foreach (StreamingDataTable t in Tables)
+                    t.WriteXML(writer);
 
                 //write end root element
                 writer.WriteEndElement();

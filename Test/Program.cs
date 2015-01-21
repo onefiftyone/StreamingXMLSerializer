@@ -19,7 +19,17 @@ namespace Test
                 int c = 0;
                 int t = ds["ROADWAY"].Count;
 
-                ds.WriteXML("../../test-file-output.xml");
+                using (var dsout = new StreamingDataSet())
+                {
+                    foreach (var table in ds.Tables)
+                    {
+                        var dt = new StreamingDataTable(table.TableName);
+                        dt.DataSource = ds[table.TableName];
+                        dsout.AddTable(dt);
+                    }
+
+                    dsout.WriteXML("../../test-file-output.xml");
+                }
             }
 
 
