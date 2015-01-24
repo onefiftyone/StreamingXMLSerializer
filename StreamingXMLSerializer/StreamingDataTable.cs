@@ -59,6 +59,9 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
         {
             get
             {
+                if (schemaTable.Columns.Count == 0 && DataSource != null)
+                    BuildSchemaTable();
+
                 return schemaTable.Columns;
             }
         }
@@ -131,10 +134,22 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             if (DataSource == null)
                 throw new Exception("DataSource cannot be NULL");
 
-            if (DataSource is IDataReader)
-                buildSchemaFromDataReader();
-            else if (DataSource is IEnumerable<StreamingDataRow>)
-                buildSchemaFromStreamingDataRow((DataSource as IEnumerable<StreamingDataRow>).FirstOrDefault());
+
+            schemaTable.Columns.Clear();
+
+            //resolve data source if its a Delegate
+            object resolvedDataSource = null;
+            if (DataSource is Delegate)
+                resolvedDataSource = ((Delegate)DataSource).DynamicInvoke();
+            else
+                resolvedDataSource = DataSource;
+
+            if (resolvedDataSource is IDataReader)
+                buildSchemaFromDataReader(resolvedDataSource as IDataReader);
+            else if (resolvedDataSource is IEnumerable<StreamingDataRow>)
+                buildSchemaFromStreamingDataRow((resolvedDataSource as IEnumerable<StreamingDataRow>).FirstOrDefault());
+            else if (resolvedDataSource is StreamingDataRow)
+                buildSchemaFromStreamingDataRow(resolvedDataSource as StreamingDataRow);
             else
                 throw new Exception("Invalid DataSource Type");
 
@@ -152,20 +167,21 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
                 schemaTable.Columns.Add(c.ColumnName, c.DataType);
         }
 
-        private void buildSchemaFromDataReader()
+        private void buildSchemaFromDataReader(IDataReader dataReader)
         {
-            DataTable drSchema = ((IDataReader)DataSource).GetSchemaTable();
+            DataTable drSchema = dataReader.GetSchemaTable();
             foreach (DataRow dr in drSchema.Rows)
             {
                 string columnName = dr["ColumnName"].ToString();
-                Type columnType;
-                if (drSchema.Columns.Contains("DataTypeName"))
-                    columnType = Type.GetType(dr["DataTypeName"].ToString());
-                else
-                    columnType = dr["DataType"] as Type;
-
+                Type columnType = dr["DataType"] as Type;
                 DataColumn column = new DataColumn(columnName, columnType);
                 schemaTable.Columns.Add(column);
+            }
+
+            if (DataSource is Delegate)
+            {
+                dataReader.Close();
+                dataReader.Dispose();
             }
         }
 
@@ -174,12 +190,21 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             if (DataSource == null)
                 throw new Exception("DataSource cannot be NULL");
 
+            //resolve data source if its a Delegate
+            object resolvedDataSource = null;
+            if (DataSource is Delegate)
+                resolvedDataSource = ((Delegate)DataSource).DynamicInvoke();
+            else
+                resolvedDataSource = DataSource;
+
             IEnumerable<StreamingDataRow> dataRows;
 
-            if (DataSource is IDataReader)
-                dataRows = consumeReader(DataSource as IDataReader);
-            else if (DataSource is IEnumerable<StreamingDataRow>)
-                dataRows = DataSource as IEnumerable<StreamingDataRow>;
+            if (resolvedDataSource is IDataReader)
+                dataRows = consumeReader(resolvedDataSource as IDataReader);
+            else if (resolvedDataSource is IEnumerable<StreamingDataRow>)
+                dataRows = resolvedDataSource as IEnumerable<StreamingDataRow>;
+            else if (resolvedDataSource is StreamingDataRow)
+                dataRows = new List<StreamingDataRow> { resolvedDataSource as StreamingDataRow };
             else
                 throw new Exception("Invalid DataSource Type");
 
@@ -188,9 +213,12 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
                 writer.WriteStartElement(TableName);
                 foreach (DataColumn column in row.Columns)
                 {
-                    writer.WriteStartElement(column.ColumnName);
-                    writer.WriteValue(row[column]);
-                    writer.WriteEndElement();
+                    if (row[column] != null) // skip element if value is null
+                    {
+                        writer.WriteStartElement(column.ColumnName);
+                        writer.WriteValue(row[column]);
+                        writer.WriteEndElement();
+                    }
                 }
                 writer.WriteEndElement();
             }
@@ -214,7 +242,11 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             }
             finally
             {
-                dataReader.Close();
+                if (DataSource is Delegate)
+                {
+                    dataReader.Close();
+                    dataReader.Dispose();
+                }
             }
         }
 
@@ -225,9 +257,10 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
         public void Dispose()
         {
             schemaTable.Dispose();
+
             if (DataSource != null)
             {
-                if(DataSource is IDataReader)
+                if (DataSource is IDataReader)
                     ((IDataReader)DataSource).Close();
                 if (DataSource is IDisposable)
                     ((IDisposable)DataSource).Dispose();

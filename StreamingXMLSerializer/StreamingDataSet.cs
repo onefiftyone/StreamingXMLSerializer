@@ -12,6 +12,11 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
         //privates
         private DataSet schemaDataSet;
         private List<StreamingDataTable> tables;
+        private static XmlWriterSettings xmlWriterSettings = new XmlWriterSettings()
+        {
+            Indent = true,
+            IndentChars = "\t"
+        };
 
         public string BaseURI { get; private set; }
 
@@ -27,11 +32,11 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             }
         }
 
-        public IEnumerable<StreamingDataTable> Tables
+        public List<StreamingDataTable> Tables
         {
             get
             {
-                return tables.AsEnumerable();
+                return tables;
             }
         }
 
@@ -102,10 +107,14 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
 
             //build schema for contained tables
             schemaDataSet.Tables.Clear();
-            foreach (StreamingDataTable t in Tables)
-                schemaDataSet.Tables.Add(t.BuildSchemaTable());
+            foreach (StreamingDataTable t in Tables.Distinct())
+            {
+                if (!schemaDataSet.Tables.Contains(t.TableName))
+                    schemaDataSet.Tables.Add(t.BuildSchemaTable());
+            }
 
-            using (var writer = XmlWriter.Create(file, new XmlWriterSettings { OmitXmlDeclaration = omitXmlDeclaration }))
+            xmlWriterSettings.OmitXmlDeclaration = omitXmlDeclaration;
+            using (var writer = XmlWriter.Create(file, xmlWriterSettings))
             {
                 //write root element
                 writer.WriteStartElement(this.DataSetName);
@@ -123,6 +132,19 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
         }
 
         #endregion
+
+        /// <summary>
+        /// Merges the specified dataset into this dataset. Disposes the input dataset.
+        /// </summary>
+        /// <param name="ds">The input StreamingDataSet.</param>
+        public void Merge(StreamingDataSet ds)
+        {
+            foreach (var table in ds.Tables)
+                this.AddTable(table);
+
+            ds.Tables.Clear();
+            ds.Dispose();
+        }
 
         #region IDisposable Members
 
