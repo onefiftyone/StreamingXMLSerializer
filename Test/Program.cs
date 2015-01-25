@@ -4,6 +4,7 @@ using System.Dynamic;
 using System.Linq;
 using System.Text;
 using OneFiftyOne.Serialization.StreamingXMLSerializer;
+using System.Data;
 
 namespace Test
 {
@@ -11,28 +12,16 @@ namespace Test
     {
         static void Main(string[] args)
         {
-            string filename = "../../test-file.xml";
-            using (var ds = new StreamingDataSet())
+            using (var dt = new StreamingDataTable("ROADWAY"))
             {
-                ds.ReadXML(filename);
+                dt.ReadXML("../../test-file-output-dt.xml");
 
-                int c = 0;
-                int t = ds["ROADWAY"].Count;
-
-                using (var dsout = new StreamingDataSet())
+                using (var dtout = new StreamingDataTable("ROADWAY"))
                 {
-                    foreach (var table in ds.Tables)
-                    {
-                        var dt = new StreamingDataTable(table.TableName);
-                        dt.DataSource = ds[table.TableName];
-                        dsout.AddTable(dt);
-                    }
-
-                    dsout.WriteXML("../../test-file-output.xml");
+                    dtout.DataSource = dt;
+                    dtout.WriteXML("../../test-file-output-streaming-dt.xml");
                 }
             }
-
-
         }
     }
 }

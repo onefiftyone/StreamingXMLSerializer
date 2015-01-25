@@ -13,6 +13,11 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
     {
         private DataTable schemaTable;
         internal int? count = null;
+        private static XmlWriterSettings xmlWriterSettings = new XmlWriterSettings()
+        {
+            Indent = true,
+            IndentChars = "\t"
+        };
 
         #region CONSTRUCTORS
 
@@ -90,6 +95,25 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
 
         #region READING
 
+        public void ReadXML(string filename)
+        {
+            BaseURI = filename;
+            schemaTable = new DataTable();
+            using (XmlReader reader = XmlReader.Create(BaseURI))
+            {
+                reader.MoveToContent();
+                if (!reader.ReadToFollowing("xs:schema"))
+                    throw new InvalidOperationException("StreamingDataTable does not support XML files with missing schema information");
+
+                using (var subReader = reader.ReadSubtree())
+                {
+                    schemaTable.ReadXmlSchema(subReader);
+                    subReader.Close();
+                }
+                reader.Close();
+            }
+        }
+
         private Dictionary<string, object> getNextInternal(XmlReader reader)
         {
             var obj = new Dictionary<string, object>(StringComparer.CurrentCultureIgnoreCase);
@@ -134,6 +158,67 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
         #endregion
 
         #region WRITING
+
+        public void WriteXML(string file, bool omitXmlDeclaration = true)
+        {
+            schemaTable = BuildSchemaTable();
+
+            xmlWriterSettings.OmitXmlDeclaration = omitXmlDeclaration;
+            using (var writer = XmlWriter.Create(file, xmlWriterSettings))
+            {
+                //write root element
+                writer.WriteStartElement("NewDataSet");
+
+                //write schema
+                schemaTable.WriteXmlSchema(writer);
+
+                //write contents
+                this.WriteXML(writer);
+
+                //write end root element
+                writer.WriteEndElement();
+            }
+        }
+
+        internal void WriteXML(XmlWriter writer)
+        {
+            if (DataSource == null)
+                throw new Exception("DataSource cannot be NULL");
+
+            //resolve data source if its a Delegate
+            object resolvedDataSource = null;
+            if (DataSource is Delegate)
+                resolvedDataSource = ((Delegate)DataSource).DynamicInvoke();
+            else
+                resolvedDataSource = DataSource;
+
+            IEnumerable<StreamingDataRow> dataRows;
+
+            if (resolvedDataSource is IDataReader)
+                dataRows = consumeReader(resolvedDataSource as IDataReader);
+            else if (resolvedDataSource is IEnumerable<StreamingDataRow>)
+                dataRows = resolvedDataSource as IEnumerable<StreamingDataRow>;
+            else if (resolvedDataSource is StreamingDataRow)
+                dataRows = new List<StreamingDataRow> { resolvedDataSource as StreamingDataRow };
+            else
+                throw new Exception("Invalid DataSource Type");
+
+            foreach (StreamingDataRow row in dataRows)
+            {
+                writer.WriteStartElement(TableName);
+                foreach (DataColumn column in row.Columns)
+                {
+                    if (row[column] != null) // skip element if value is null
+                    {
+                        writer.WriteStartElement(column.ColumnName);
+                        writer.WriteValue(row[column]);
+                        writer.WriteEndElement();
+                    }
+                }
+                writer.WriteEndElement();
+            }
+        }
+
 
         internal DataTable BuildSchemaTable()
         {
@@ -188,45 +273,6 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             {
                 dataReader.Close();
                 dataReader.Dispose();
-            }
-        }
-
-        internal void WriteXML(XmlWriter writer)
-        {
-            if (DataSource == null)
-                throw new Exception("DataSource cannot be NULL");
-
-            //resolve data source if its a Delegate
-            object resolvedDataSource = null;
-            if (DataSource is Delegate)
-                resolvedDataSource = ((Delegate)DataSource).DynamicInvoke();
-            else
-                resolvedDataSource = DataSource;
-
-            IEnumerable<StreamingDataRow> dataRows;
-
-            if (resolvedDataSource is IDataReader)
-                dataRows = consumeReader(resolvedDataSource as IDataReader);
-            else if (resolvedDataSource is IEnumerable<StreamingDataRow>)
-                dataRows = resolvedDataSource as IEnumerable<StreamingDataRow>;
-            else if (resolvedDataSource is StreamingDataRow)
-                dataRows = new List<StreamingDataRow> { resolvedDataSource as StreamingDataRow };
-            else
-                throw new Exception("Invalid DataSource Type");
-
-            foreach (StreamingDataRow row in dataRows)
-            {
-                writer.WriteStartElement(TableName);
-                foreach (DataColumn column in row.Columns)
-                {
-                    if (row[column] != null) // skip element if value is null
-                    {
-                        writer.WriteStartElement(column.ColumnName);
-                        writer.WriteValue(row[column]);
-                        writer.WriteEndElement();
-                    }
-                }
-                writer.WriteEndElement();
             }
         }
 
