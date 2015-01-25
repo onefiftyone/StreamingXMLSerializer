@@ -24,7 +24,7 @@ namespace Test
                     foreach (var table in ds.Tables)
                     {
                         var dt = new StreamingDataTable(table.TableName);
-                        dt.DataSource = ds[table.TableName].Take(2);
+                        dt.DataSource = ds[table.TableName];
                         dsout.AddTable(dt);
                     }
 

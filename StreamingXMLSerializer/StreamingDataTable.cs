@@ -105,8 +105,14 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
                         {
                             if (obj.ContainsKey(subReader.LocalName))
                                 throw new DuplicateNameException("Key '" + subReader.LocalName + "; already exists");
-                            obj[subReader.LocalName]
-                                = subReader.ReadElementContentAs(schemaTable.Columns[subReader.LocalName].DataType, null);
+
+                            //nil/null check
+                            var nilAttr = subReader.GetAttribute("xsi:nil");
+                            if (!string.IsNullOrWhiteSpace(nilAttr) && nilAttr.Equals("true", StringComparison.CurrentCultureIgnoreCase))
+                                obj[subReader.LocalName] = null;
+                            else
+                                obj[subReader.LocalName]
+                                    = subReader.ReadElementContentAs(schemaTable.Columns[subReader.LocalName].DataType, null);
                         }
                     }
                     subReader.Close();
