@@ -97,6 +97,11 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
 
         public void ReadXML(string filename)
         {
+            if (string.IsNullOrWhiteSpace(filename))
+                throw new Exception("Missing filename");
+            if (!File.Exists(filename))
+                throw new FileNotFoundException("File does not exist: " + filename);
+
             BaseURI = filename;
             schemaTable = new DataTable();
             using (XmlReader reader = XmlReader.Create(BaseURI))
@@ -300,6 +305,30 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
                     dataReader.Dispose();
                 }
             }
+        }
+
+        #endregion
+
+        #region TRANSFORM
+
+        public static void TransformXML(string inputFile, string outputFile, Func<StreamingDataRow, StreamingDataRow> transformFunction)
+        {
+            using (var dt = new StreamingDataTable("NewDataSet"))
+            {
+                dt.ReadXML(inputFile);
+
+                using (var output = new StreamingDataTable(dt.TableName))
+                {
+                    output.DataSource = executeTransform(dt, transformFunction);
+                    output.WriteXML(outputFile);
+                }
+            }
+        }
+
+        private static IEnumerable<StreamingDataRow> executeTransform(IEnumerable<StreamingDataRow> inputStream, Func<StreamingDataRow, StreamingDataRow> transformFunction)
+        {
+            foreach (var dr in inputStream)
+                yield return transformFunction(dr);
         }
 
         #endregion
