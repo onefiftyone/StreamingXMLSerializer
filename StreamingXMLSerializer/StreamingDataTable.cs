@@ -12,16 +12,24 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
     public class StreamingDataTable : IDisposable, IEnumerable<StreamingDataRow>
     {
         private DataTable schemaTable;
-        internal int? count = null;
+        private int? count = null;
         private static XmlWriterSettings xmlWriterSettings = new XmlWriterSettings()
         {
             Indent = true,
             IndentChars = "\t"
         };
 
+        public static Func<IDataRecord, int, object> DefaultDataRecordFieldReader = (dataRecord, field) =>
+        {
+            if (!dataRecord.IsDBNull(field))
+                return dataRecord.GetValue(field);
+            else
+                return null;
+        };
+            
         #region CONSTRUCTORS
 
-        internal StreamingDataTable(string baseURI, DataTable t)
+        internal StreamingDataTable(string baseURI, DataTable t) : this()
         {
             if (string.IsNullOrWhiteSpace(baseURI))
                 throw new Exception("Missing filename");
@@ -32,12 +40,17 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             schemaTable = t;
         }
 
-        public StreamingDataTable(string tableName)
+        public StreamingDataTable(string tableName) : this()
         {
             if (string.IsNullOrWhiteSpace(tableName))
                 throw new Exception("Invalid table name specified");
 
             schemaTable = new DataTable(tableName);
+        }
+
+        private StreamingDataTable()
+        {
+            DataRecordFieldReader = StreamingDataTable.DefaultDataRecordFieldReader;
         }
 
         #endregion
@@ -90,6 +103,8 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
         }
 
         public object DataSource { get; set; }
+
+        public Func<IDataRecord, int, object> DataRecordFieldReader { get; set; }
 
         #endregion
 
@@ -291,7 +306,7 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
                     for (int i = 0; i < dataReader.FieldCount; i++)
                     {
                         if (!dataReader.IsDBNull(i))
-                            row[dataReader.GetName(i)] = dataReader.GetValue(i);
+                            row[dataReader.GetName(i)] = DataRecordFieldReader(dataReader, i);
                     }
 
                     yield return row;
