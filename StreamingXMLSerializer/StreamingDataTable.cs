@@ -11,6 +11,7 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
 {
     public class StreamingDataTable : IDisposable, IEnumerable<StreamingDataRow>
     {
+        #region PRIVATES
         private DataTable schemaTable;
         private int? count = null;
         private static XmlWriterSettings xmlWriterSettings = new XmlWriterSettings()
@@ -18,7 +19,9 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             Indent = true,
             IndentChars = "\t"
         };
+        #endregion
 
+        #region STATIC MEMBERS
         public static Func<IDataRecord, int, object> DefaultDataRecordFieldReader = (dataRecord, field) =>
         {
             if (!dataRecord.IsDBNull(field))
@@ -26,7 +29,8 @@ namespace OneFiftyOne.Serialization.StreamingXMLSerializer
             else
                 return null;
         };
-            
+        #endregion
+
         #region CONSTRUCTORS
 
         internal StreamingDataTable(string baseURI, DataTable t) : this()
